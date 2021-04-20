@@ -19,18 +19,32 @@ if !exists('g:cekdulu_qf_load')
   let g:cekdulu_qf_load = 0
 endif
 
-" lua require'cekdulu.config'.init()
+if !exists('g:cekdulu_fname_todo')
+  let g:cekdulu_fname_todo = "cekdulu_todo"
+endif
 
-command! CekduluToggle lua require'cekdulu'.cekdulu_toggle()
+if !exists('g:cekdulu_fname_qf')
+  let g:cekdulu_fname_qf = "cekdulu_qf.json"
+endif
+
+command! CekduluToggle lua require'cekdulu'.todo_toggle()
+
+command! CekduluqfLoad lua require'cekdulu'.qf_load()
+command! CekduluqfRemove lua require'cekdulu'.qf_remove()
+
+command! CekduluTodoTest lua require'cekdulu.todo'.test()
 
 command! CekduluqfAdd lua require'cekdulu'.add()
-command! CekduluqfLoad lua require'cekdulu'.load()
 command! CekduluqfSave lua require'cekdulu'.save()
-command! CekduluqfRemove lua require'cekdulu'.remove()
 command! CekduluqfNoteAdd lua require'cekdulu'.add_note()
 
 command! CekduluqfTestWrap lua require'cekdulu'.test_wrap_note()
 command! CekduluqfYo lua require'cekdulu'.yo()
+
+command! CekduluDash lua require'cekdulu'.dash_toggle()
+command! CekduluDashClose lua require'cekdulu'.dash_close()
+
+command! Keep lua require'cekdulu.qf'.qf_fkeep('freject')
 
 " command! CekduluYak lua require'cekdulu.qf'.enable()
 

@@ -3,6 +3,164 @@ local config = require("cekdulu.config")
 local api = vim.api
 local fn = vim.fn
 
+-- taken from lspsaga
+local function get_border_style(style, highlight)
+
+  highlight = highlight or "FloatBorder"
+  local border_style = {
+    ["single"] = "single",
+    ["double"] = "double",
+    ["round"] = {
+      { "╭", highlight },
+      { "─", highlight },
+      { "╮", highlight },
+      { "│", highlight },
+      { "╯", highlight },
+      { "─", highlight },
+      { "╰", highlight },
+      { "│", highlight },
+    },
+    ["bold"] = {
+      { "┏", highlight },
+      { "─", highlight },
+      { "┓", highlight },
+      { "│", highlight },
+      { "┛", highlight },
+      { "─", highlight },
+      { "┗", highlight },
+      { "│", highlight },
+    },
+    ["plus"] = {
+      { "+", highlight },
+      { "─", highlight },
+      { "+", highlight },
+      { "│", highlight },
+      { "+", highlight },
+      { "─", highlight },
+      { "+", highlight },
+      { "│", highlight },
+    },
+  }
+
+  return border_style[style]
+
+end
+
+local function make_floating_popup_options(width, height, opts)
+
+  opts = opts or {}
+
+  local new_option = {}
+
+  new_option.style = "minimal"
+  new_option.width = width
+  new_option.height = height
+
+  if opts.relative ~= nil then
+    new_option.relative = opts.relative
+  else
+    new_option.relative = "cursor"
+  end
+
+  if opts.anchor ~= nil then
+    new_option.anchor = opts.anchor
+  end
+
+  if opts.row == nil and opts.col == nil then
+
+    local lines_above = vim.fn.winline() - 1
+    local lines_below = vim.fn.winheight(0) - lines_above
+    new_option.anchor = ""
+
+    if lines_above < lines_below then
+      new_option.anchor = new_option.anchor .. "N"
+      height = math.min(lines_below, height)
+      new_option.row = 1
+    else
+      new_option.anchor = new_option.anchor .. "S"
+      height = math.min(lines_above, height)
+      new_option.row = -2
+    end
+
+    if vim.fn.wincol() + width <= api.nvim_get_option("columns") then
+      new_option.anchor = new_option.anchor .. "W"
+      new_option.col = 0
+    else
+      new_option.anchor = new_option.anchor .. "E"
+      new_option.col = 1
+    end
+  else
+    new_option.row = opts.row
+    new_option.col = opts.col
+  end
+
+  -- print(vim.inspect(new_option))
+
+  return new_option
+
+end
+
+local function generate_win_opts(contents, opts)
+
+  opts = opts or {}
+  local win_width, win_height = vim.lsp.util._make_floating_popup_size(contents, opts)
+
+  opts = make_floating_popup_options(win_width, win_height, opts)
+  return opts
+
+end
+
+local function create_win_with_border(content_opts, opts)
+
+  local contents, filetype = content_opts.contents, content_opts.filetype
+  local enter = content_opts.enter or false
+  local modifiable = content_opts.modifiable or false
+  local highlight = content_opts.highlight or "LspFloatWinBorder"
+  opts = opts or {}
+  opts = generate_win_opts(contents, opts)
+  opts.border = get_border_style("round", highlight)
+
+  -- print(vim.inspect(opts))
+  if opts.width <= 0 then
+    opts.width = 20
+  end
+
+  -- create contents buffer
+  local bufnr = api.nvim_create_buf(false, true)
+  -- buffer settings for contents buffer
+  -- Clean up input: trim empty lines from the end, pad
+  local content = vim.lsp.util._trim(contents)
+
+  if filetype then
+    api.nvim_buf_set_option(bufnr, "filetype", filetype)
+  end
+
+  -- print(vim.inspect(opts))
+
+  api.nvim_buf_set_lines(bufnr, 1, -1, true, content)
+  api.nvim_buf_set_option(bufnr, "modifiable", modifiable)
+  api.nvim_buf_set_option(bufnr, "bufhidden", "wipe")
+  api.nvim_buf_set_option(bufnr, "buftype", "nofile")
+
+  local winid = api.nvim_open_win(bufnr, enter, opts)
+  if filetype == "markdown" then
+    api.nvim_win_set_option(winid, "conceallevel", 2)
+  end
+
+  -- api.nvim_win_set_option(
+  --   winid,
+  --   "winhl",
+  --   "Normal:NormalFloat,FloatBorder:" .. highlight
+  -- )
+
+  api.nvim_win_set_option(winid, "winhl", "Normal:Normal,EndOfBuffer:Normal")
+
+  api.nvim_win_set_option(winid, "winblend", 0)
+  api.nvim_win_set_option(winid, "foldlevel", 100)
+  return bufnr, winid
+
+end
+
 local M = {}
 
 M.reset_window = function()
@@ -17,46 +175,8 @@ M.reset_window = function()
   local row = math.ceil((height - win_height) / 2)
   local col = math.ceil((width - win_width) / 2)
 
-  config.bufnr_opts = {
-    style = "minimal",
-    relative = "editor",
-    height = win_height - 5,
-    width = win_width - 8,
-    row = row + 2,
-    col = col + 4,
-  }
-
-  config.bufnr_border_opts = {
-
-    style = "minimal",
-    relative = "editor",
-    width = win_width + 2,
-    height = win_height + 2,
-    row = row - 1,
-    col = col - 1,
-    focusable = false,
-
-  }
-
-  config.bufnr_qf_opts = {
-
-    style = "minimal",
-    relative = "win",
-    -- width = win_width - 20,
-    width = 60,
-    height = 6,
-    row = row - 10,
-    col = row,
-    focusable = false,
-    anchor = "SW", -- SW
-
-  -- • "NW" northwest (default)
-  -- • "NE" northeast
-  -- • "SW" southwest
-  -- • "SE" southeast
-
-  }
-
+  config.col = col
+  config.row = row
   config.win_height = win_height
   config.win_width = win_width
 
@@ -92,116 +212,32 @@ M.wipeout_buffer = function(bufnr)
 
 end
 
-M.create_border = function(bufnr, opts)
+M.create_win_float_with_border = function(opts, contents, func)
 
-  local middle_line = "│" .. string.rep(" ", config.win_width) .. "│"
-  local border_lines = { "╭" .. string.rep("─", config.win_width) .. "╮" }
+  local content_opts = {
+    contents = contents,
+    filetype = opts.bufname,
+    enter = opts.enter,
+    modifiable = true,
+    highlight = "LspSagaSignatureHelpBorder",
+  }
 
-  for _ = 1, config.win_height do
-    table.insert(border_lines, middle_line)
-  end
+  local buf, win = create_win_with_border(content_opts, opts)
 
-  table.insert(
-    border_lines,
-    "╰─"
-      .. string.rep("─", config.win_width - #opts.bufname - 4)
-      .. " "
-      .. opts.bufname
-      .. " "
-      .. "─"
-      .. "╯"
-  )
-
-  api.nvim_buf_set_lines(bufnr, 0, -1, false, border_lines)
-
-end
-
-M.create_win_border = function(go_to_window, opts)
-
-  local buf_border = api.nvim_create_buf(false, true)
-  local win_border = api.nvim_open_win(buf_border, go_to_window, opts.bufnr_border_opts)
-  M.create_border(buf_border, config)
-  api.nvim_buf_set_option(buf_border, "filetype", opts.bufname)
-  api.nvim_win_set_option(win_border, "winhl", "Normal:Normal,EndOfBuffer:Normal")
-
-  config.bufnr_border = buf_border
-  config.border_winid = win_border
-
-end
-
-M.create_win_float = function(filetype, opts, contents, myfn)
-
-  M.reset_window()
-
-  if M.buf_exits(config.bufnr, config.bufname) then
-    return
-  end
-
-  local go_to_window = true
-
-  if filetype == "qf" then
-    go_to_window = false
-  end
-
-  -- Create border buffer
-  if filetype ~= "qf" then
-    local buf_border = api.nvim_create_buf(false, true)
-    local win_border = api.nvim_open_win(buf_border, go_to_window, opts.bufnr_border_opts)
-    M.create_border(buf_border, config)
-    api.nvim_buf_set_option(buf_border, "filetype", opts.bufname)
-    api.nvim_win_set_option(win_border, "winhl", "Normal:Normal,EndOfBuffer:Normal")
-
-    config.bufnr_border = buf_border
-    config.border_winid = win_border
-  end
-
-  -- Buffer content
-  local buf = api.nvim_create_buf(false, true)
-
-  api.nvim_buf_set_option(buf, "bufhidden", "wipe")
-  api.nvim_buf_set_option(buf, "buftype", "nofile")
-
-  local win = nil
-
-  if #contents > 0 and contents ~= nil then
-    api.nvim_buf_set_lines(buf, 0, -1, true, contents)
-
-    if filetype == "qf" then
-      api.nvim_buf_set_option(buf, "filetype", opts.bufname_qf)
-      api.nvim_buf_set_option(buf, "modifiable", false)
-      win = api.nvim_open_win(buf, go_to_window, opts.bufnr_qf_opts)
-
-      config.bufnr_qf_winid = win
-
-    else
-      api.nvim_buf_set_option(buf, "filetype", opts.bufname)
-      win = api.nvim_open_win(buf, go_to_window, opts.bufnr_opts)
-      -- api.nvim_command(":silent! 0r " .. contents)
-      api.nvim_set_current_win(win)
-    end
-    api.nvim_win_set_option(win, "winhl", "Normal:Normal,EndOfBuffer:Normal")
-  end
-
-  buf = myfn() or buf
-
-  return buf
+  func(buf, win)    -- nothing todo..
 
 end
 
 M.close = function(winid)
 
-  if vim.api.nvim_win_is_valid(winid) then
-    api.nvim_win_close(winid, true)
+  -- print("closing ", winid)
+
+  if winid and winid ~= nil then
+    if vim.api.nvim_win_is_valid(winid) then
+      api.nvim_win_close(winid, true)
+    end
   end
 
-  --   if not pcall(function()
-  --     api.nvim_win_close(winid, true)
-  --   end) then
-  --     -- Vim:E444: Cannot close last window
-
-  --     print("yo bro")
-  --     cmd("quit")
-  --   end
 end
 
 return M

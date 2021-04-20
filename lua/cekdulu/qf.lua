@@ -1,21 +1,20 @@
 local config = require("cekdulu.config")
 local loaddata = require("cekdulu.load-data")
 local windows = require("cekdulu.windows")
+local util = require("cekdulu.utils")
 
 local fn = vim.fn
 local api = vim.api
--- local cmd = vim.cmd
--- local g = vim.get
 
 local index = nil
+local insert_note = false
+-- local last_idx = 1
 
 local M = {}
 
 M = {
   user_lists = {},
   nonuser_lists = {},
-
-  title_qf = config.bufname_qf,
 }
 
 local function is_qf_window()
@@ -31,17 +30,20 @@ local function is_qf_window()
 
 end
 
-local function is_qf_cekdulu(title_qf)
+local function get_current_title_qf()
+
+  return fn.getqflist({ ["title"] = 1 }).title
+end
+
+local function is_qf_cekdulu()
 
   if not is_qf_window() then
     return
   end
 
-  local title = title_qf or M.title_qf
+  local what_title_qf = get_current_title_qf()
 
-  local what_title_qf = fn.getqflist({ ["title"] = 1 })
-
-  if what_title_qf.title ~= title then
+  if what_title_qf ~= config.bufnr_qf_bufname then
     print("[!] The item qf you pick thats not part of cekdulu_qf, continue..")
     return false
   end
@@ -50,85 +52,70 @@ local function is_qf_cekdulu(title_qf)
 
 end
 
-local clear_prompt = function()
-  api.nvim_command("normal :esc<CR>")
-end
+-- local function del_tbl_idx_key(table)
 
--- local clear_prompt_with_print = function()
---   clear_prompt()
---   print("aborting..")
---   return
+--   for i = 1, #table do
+--     if i == index then
+--       table[i] = nil
+--     end
+--   end
+
 -- end
 
-local function deltable_by_key(table)
+-- local function insert_table(newtable, insert)
 
-  for i = 1, #table do
-    if i == index then
-      table[i] = nil
-    end
-  end
+--   for i = 1, #insert do
+--     table.insert(newtable, insert[i])
+--   end
 
-end
+-- end
 
-local function table_insert(newtable, insert)
+M.win_float_qf = function(contents)
 
-  for i = 1, #insert do
-    table.insert(newtable, insert[i])
-  end
+  windows.reset_window()
 
-end
+  if not insert_note then
+    config.relative = "win"
+    config.enter = false
+    config.row = config.row - 15
+    config.col = config.col + 50
 
-M.win_float_qf = function(filetype, ask, contents)
+    windows.create_win_float_with_border(config, contents, function(_, win)
+      config.bufnr_qf_winid = win
 
-  if windows.buf_exits(config.bufnr_qf, config.bufname_qf) then
+    end)
     return
   end
 
-  local data = ask or false
+  insert_note = false
 
-  local buf = windows.create_win_float(filetype, config, contents, function()
+  config.relative = "editor"
+  config.enter = true
+  -- config.row = config.row - 1
+  -- config.col = config.col - 1
+  -- config.width = config.win_width - 15
+  -- config.height = config.win_height - 15
 
-    if not data then
+  contents = contents or { "hore bro" }
 
-      if config.bufnr_qf_winid ~= nil then
-        M.show_note_close(config.bufnr_qf_winid)
-      end
+  windows.create_win_float_with_border(config, contents, function(_, win)
+    config.bufnr_note_winid = win
 
-      local buf = api.nvim_create_buf(false, true)
-      api.nvim_buf_set_option(buf, "filetype", config.bufname_qf_note)
-      api.nvim_buf_set_option(buf, "bufhidden", "wipe")
-      api.nvim_buf_set_option(buf, "buftype", "nofile")
-
-      local win = api.nvim_open_win(buf, true, config.bufnr_opts)
-      -- M.create_border(buf_border, config)
-      -- config.border_qf_border_winid = win
-
-      api.nvim_buf_set_lines(buf, 0, -1, true, contents)
-      api.nvim_win_set_option(
-        win,
-        "winhl",
-        "Normal:Normal,EndOfBuffer:Normal"
-      )
-
-      api.nvim_buf_set_var(buf, "floatwin_cekdulu_qf_note", 1)
-      api.nvim_set_current_win(win)
-
-      vim.lsp.util.close_preview_autocmd({ "BufLeave" }, win)
-      return win
-    end
   end)
-
-  config.border_qf_border_winid = buf
 
 end
 
-M.show_note_close = function(bufnr)
+M.show_note_popup_close = function(bufnr)
 
   windows.close(bufnr)
 
 end
 
-M.show_note_popup = function()
+M.show_note_popup = function(force)
+
+  if force then
+    return
+  end
 
   if not is_qf_cekdulu() then
     return
@@ -141,67 +128,7 @@ M.show_note_popup = function()
   end
 
   if #M.user_lists[index].note > 0 then
-    M.win_float_qf("qf", true, M.user_lists[index].note)
-  end
-
-end
-
-M.move_cursor = function()
-
-  if not is_qf_window() then
-    return
-  end
-
-  local qf_winid = api.nvim_get_current_win()
-
-  if qf_winid ~= config.bufnr_qf_winid and config.bufnr_qf_winid ~= nil then
-
-    M.show_note_close(config.bufnr_qf_winid)
-
-  end
-
-  M.show_note_popup()
-
-end
-
-M.buf_enter = function()
-
-  M.show_note_popup()
-
-end
-
-M.buf_leave = function()
-
-  if config.bufnr_qf_winid ~= nil then
-    M.show_note_close(config.bufnr_qf_winid)
-  end
-
-end
-
-M.enable = function()
-
-  if not is_qf_window() then
-    return
-  end
-
-  local what_title_qf = fn.getqflist({ ["title"] = 1 })
-
-  -- eww ugly creating autocmds with string..!
-  if what_title_qf.title == M.title_qf then
-    api.nvim_exec(
-      [[
-          augroup Cekdulu_qf
-              autocmd! BufLeave,WinLeave,CursorMoved,TabEnter,BufHidden,VimResized <buffer>
-              autocmd! BufEnter,QuitPre <buffer>
-              autocmd CursorMoved <buffer> lua require'cekdulu.qf'.move_cursor()
-          augroup END
-      ]],
-
-      false
-    )
-
-    -- autocmd BufLeave <buffer> lua require'cekdulu.qf'.buf_leave()
-    -- autocmd BufEnter <buffer> lua require'cekdulu.qf'.buf_enter()
+    M.win_float_qf(M.user_lists[index].note)
   end
 
 end
@@ -222,7 +149,7 @@ M.add = function()
     col = get_curpos[3],
     filename = filename,
     note = {},
-    date = {},
+    date = fn.strftime("%d %b %Y"),
     text = get_line,
   }
 
@@ -233,50 +160,60 @@ M.add = function()
 end
 
 -- TODO:
--- - add note juga seharusnya berlaku juga diluar quickfix,
---   jadi sambil isi note langsung di masukkan ke quickfix berserta note nya.
---   jadi add_note harus punya kondisi dimana behavior nya berubah ketiak didalam
---  quickfix dan di liuar quickfix
---
--- FITUR: add_note ketika ingin menambahkan note ke cekdulu_qf
--- isinya di window floating atau di isi di bagian bawah cmd?
+-- masih error saat add_note, selalu muncul buffer [Scratch] (cek command :ls!)
+-- ada 3 cara yang terpikirkan untuk memecahkan masalah ini:
+-- - masalahnya pada autocmds bufmove cursor, karena ketika berada di qf
+-- dia aktif (close note dan open note)..namun ketika kita open edit note
+-- dia menjadi aktif..makanya spawn bersamaan dengan open edit note
 M.add_note = function()
 
-  if not is_qf_cekdulu() then
+  local filetype = api.nvim_buf_get_option(0, "filetype")
+
+  if filetype ~= config.bufname then
+
+    index = fn.line(".")
+
+    local contents = #M.user_lists[index].note > 0
+      and { "" }
+      or M.user_lists[index].note
+
+    insert_note = true
+
+    M.win_float_qf(contents)
     return
+
   end
 
-  index = fn.line(".")
+  --   if not api.nvim_buf_get_var(0, "floatwin_cekdulu_qf_note") == 1 then
+  --     return
+  --   end
 
-  local content = fn.input("INSERT > ")
+  --   -- TODO: tutup buffer note yang masih terbuka di karenakan effect dari
+  --   -- autocmd bufmoved
+  --   M.show_note_popup_close(config.border_qf_border_winid)
 
-  if #content == 0 then
-    return
+  --   -- grab all content current buffer
+  local stripped = vim.fn.getline(1, "$")
+
+  if #stripped[1] > 0 then
+    M.user_lists[index].note = stripped
   end
 
-  M.user_lists[index].note = content
-
-  if config.bufnr_qf_winid ~= nil then
-    M.show_note_close(config.bufnr_qf_winid)
-  end
-
-  clear_prompt()
-
-  M.show_note_popup()
+  api.nvim_command("wincmd p")
 
 end
 
-M.update = function(table_mode, title)
+M.update = function(tbl, title)
 
   local action = "r"
   local tryidx = "$"
 
-  local title_ctx = title or M.title_qf
+  local title_ctx = title or config.bufnr_qf_bufname
 
   local what = {
     title = title_ctx,
     context = title_ctx,
-    items = table_mode,
+    items = tbl,
     idx = tryidx,
   -- quickfixtextfunc = "",
   }
@@ -337,55 +274,14 @@ M.load = function()
   M.update(M.user_lists)
 
   vim.cmd("copen")
-  M.show_note_popup()
-
-end
-
-M.test_wrap_note = function()
-
-  local filetype = api.nvim_buf_get_option(0, "filetype")
-
-  if filetype == "qf" then
-
-    if not is_qf_cekdulu() then
-      return
-    end
-
-    M.buf_leave()
-
-    index = fn.line(".")
-
-    M.win_float_qf("qf", false, M.user_lists[index].note)
-    return
-
-  end
-
-  if filetype == config.bufname_qf_note then
-
-    if not api.nvim_buf_get_var(0, "floatwin_cekdulu_qf_note") == 1 then
-      return
-    end
-
-    local stripped = vim.fn.getline(1, "$")
-    M.user_lists[index].note = stripped
-
-    if
-      config.bufnr_qf_border_winid ~= nil
-      or config.border_qf_border_winid
-    then
-
-      M.show_note_close(config.bufnr_qf_border_winid)
-    end
-
-    api.nvim_command("wincmd p")
-
-  end
 
 end
 
 M.yo = function()
 
-  print("yo")
+  index = fn.line(".")
+
+  print(M.user_lists[index].date)
 
 end
 
@@ -395,34 +291,145 @@ M.remove = function()
     return
   end
 
+  local what_title_qf = get_current_title_qf()
+
+  local qfall = fn.getqflist()
   index = fn.line(".")
 
-  local cektodo_lists = #M.user_lists > 0 and M.user_lists or fn.getqflist()
+  local newtbl = {}
 
-  deltable_by_key(cektodo_lists)
+  for i = 1, #qfall do
+    if i == index then
+      qfall[i] = nil
+    end
 
-  -- Kita harus mereset table yang sudah ada menjadi nil,
-  -- karena akan di timpa dengan item yang baru
-  local newtable = nil
-
-  if #M.user_lists > 0 then
-    M.user_lists = {}
-    newtable = M.user_lists
-
-  else
-    M.nonuser_lists = {}
-    newtable = M.nonuser_lists
+    table.insert(newtbl, qfall[i])
   end
 
-  table_insert(newtable, cektodo_lists)
-
-  M.update(newtable, ":setqflist()")
+  local what = {
+    title = what_title_qf,
+    context = what_title_qf,
+    items = newtbl,
+    idx = "$",
+  -- quickfixtextfunc = "",
+  }
+  if what_title_qf == config.bufnr_qf_bufname then
+    M.user_lists = newtbl
+    M.update(M.user_lists)
+  else
+    fn.setqflist({}, "r", what)
+  end
 
 end
 
-M.remove_all = function()
+M.buf_move_cursor = function()
 
-  M.user_lists = {}
+  -- if not is_qf_window() and win_qfnote_active == 1 then
+  --   return
+  -- end
+
+  -- local filetype = api.nvim_buf_get_option(0, "filetype")
+  insert_note = false
+
+  M.buf_leave()
+  -- print("move cursor bergerak ", config.bufnr_qf_winid)
+
+  M.show_note_popup()
+
+end
+
+M.buf_enter = function()
+
+  insert_note = false
+
+  M.show_note_popup(true)
+
+end
+
+M.buf_leave = function()
+
+  insert_note = false
+
+  M.show_note_popup_close(config.bufnr_qf_winid)
+  M.show_note_popup_close(config.bufnr_note_winid)
+
+end
+
+M.enable = function()
+
+  if not is_qf_window() then
+    return
+  end
+
+  local what_title_qf = get_current_title_qf()
+
+  -- eww ugly creating autocmds with string..!
+  if what_title_qf == config.bufnr_qf_bufname then
+
+    api.nvim_exec(
+      [[
+          augroup Cekdulu_qf
+              autocmd! BufLeave,WinLeave,CursorMoved,TabEnter,BufHidden,VimResized <buffer>
+              autocmd! BufEnter,QuitPre <buffer>
+              autocmd CursorMoved <buffer> lua require'cekdulu.qf'.buf_move_cursor()
+              autocmd BufEnter <buffer> lua require'cekdulu.qf'.buf_enter()
+              autocmd BufLeave <buffer> lua require'cekdulu.qf'.buf_leave()
+          augroup END
+      ]],
+
+      false
+    )
+
+  end
+
+end
+
+--------------------------------------
+--------------------------------------
+
+M.qf_fkeep = function(tmode)
+
+  local pattern = tmode or ""
+
+  if not is_qf_window() then
+    return
+  end
+
+  local ans_keep = fn.input("Keep > ")
+
+  if #ans_keep == 0 then
+    return
+  end
+
+  local newtable = {}
+
+  -- freject, me-reject file berdasarkan pattern nya
+  if pattern == "freject" then
+
+    util.clear_prompt()
+
+    local getqf = fn.getqflist()
+
+    for i = 1, #getqf do
+      -- print(getqf[i])
+      if
+      -- TODO: regex belum optimal!!
+        api.nvim_buf_get_name(getqf[i].bufnr):match("[/]*" .. ans_keep .. ".*")
+      then
+        table.insert(newtable, getqf[i])
+      end
+    end
+
+  end
+
+  local what = {
+    title = ":setqflist() " .. "[" .. ans_keep .. "]",
+    context = ":setqflist() " .. "[" .. ans_keep .. "]",
+    items = newtable,
+    idx = "$",
+  }
+
+  fn.setqflist({}, "r", what)
 
 end
 

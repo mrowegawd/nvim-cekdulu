@@ -1,45 +1,74 @@
-local load_data = require("cekdulu.load-data")
 local config = require("cekdulu.config")
+local load_data = require("cekdulu.load-data")
 local windows = require("cekdulu.windows")
 local mappings = require("cekdulu.mappings")
 
 local api = vim.api
 local fn = vim.fn
+local line = nil
+local lsp = vim.lsp
+local mode = 0
+
+local function clear_bufnr_from_buflists(pattern_bufname)
+
+  for _, i in ipairs(api.nvim_list_bufs()) do
+    if api.nvim_buf_is_loaded(i) and fn.buflisted(i) ~= 0 then
+      if api.nvim_buf_get_name(i):match(".*/" .. pattern_bufname .. "$") then
+        vim.cmd("bdelete! " .. i)
+      end
+    end
+  end
+
+end
 
 local M = {}
 
-M.win_float_todo = function()
+local load_contents = function()
 
   local output_table_string_path_todo = fn.systemlist("cat " .. config.path_todo)
 
-  -- delete unwanted lines from tables (`cat command` output)
-  local stripped = vim.lsp.util._trim(output_table_string_path_todo)
-  local contents = vim.lsp.util.convert_input_to_markdown_lines(stripped)
+  local contents = { "" }
 
-  local buf = windows.create_win_float("todo", config, contents)
+  if #output_table_string_path_todo > 0 then
 
-  config.bufnr_winid = buf.win
+    -- delete unwanted lines from contents ( from `cat command` output)
+    local stripped = lsp.util._trim(output_table_string_path_todo)
+    contents = lsp.util.convert_input_to_markdown_lines(stripped)
 
-  -- NOTE: ketika window cekdulu spawned, apply these options
-  for _, opt in pairs(config.options) do
-    api.nvim_command("setlocal " .. opt)
+    return contents
+
   end
 
-  config.bufnr_created = true
+  -- harus dipastikan contents setidaknya mempunyai isi,
+  -- dengen length list 1
+  return contents
 
-  api.nvim_buf_set_var(buf.buf, "float_cekdulu_todo_win", 1)
+end
 
-  windows.wipeout_buffer(config.bufnr_border)
+M.win_float_todo = function()
+
+  windows.reset_window()
+
+  local contents = load_contents()
+
+  config.relative = "editor"
+  config.enter = true
+  config.height = config.win_height - 15
+  config.width = config.win_width
+
+  windows.create_win_float_with_border(config, contents, function(buf, win)
+    config.bufnr_todo_winid = win
+
+  end)
 
 end
 
 M.win_stack_todo = function()
 
-  -- TODO: another stack window like __scratch__
+  -- TODO: create stack todo win
 
 end
 
-local mode = 0
 -- 'unchecked': '  ',
 -- 'checked':   '  ',
 -- 'loading':   '  ',
@@ -49,7 +78,7 @@ M.set_list_done = function()
 
   mode = 1
 
-  local line = fn.getline(".")
+  line = fn.getline(".")
   fn.setline(".", fn.substitute(line, "^\\(\\s*\\) ", "\\1 ", ""))
 
 end
@@ -58,14 +87,14 @@ M.set_list_not_done = function()
 
   mode = 0
 
-  local line = fn.getline(".")
+  line = fn.getline(".")
   fn.setline(".", fn.substitute(line, "^\\(\\s*\\) ", "\\1 ", ""))
 
 end
 
 M.check_list = function()
 
-  local line = fn.getline(".")
+  line = fn.getline(".")
 
   if fn.match(line, "^\\s* .*") == -1 then
     mode = 0
@@ -84,7 +113,7 @@ end
 
 M.check_all_list = function()
 
-  local line = fn.getline(".")
+  line = fn.getline(".")
 
   if fn.match(line, "^\\s*\\( \\| \\).*") == -1 then
     mode = 0
@@ -98,7 +127,7 @@ end
 
 M.is_date_is_set = function()
 
-  local line = fn.getline(".")
+  line = fn.getline(".")
 
   local already_dated = fn.matchstr(line, "@\\d\\{2\\}-\\d\\{2\\}-\\d\\{2,4\\}")
 
@@ -127,8 +156,29 @@ M.set_list_todo = function()
     return
   end
 
-  local line = fn.getline(".")
-  fn.setline(".", fn.substitute(line, "^\\s*", "\\1 ", ""))
+  line = fn.getline(".")
+  fn.setline(".", fn.substitute(line, "^\\s*", "\\1 @todo: ", ""))
+
+end
+
+M.toggle_list_todo = function()
+
+  line = fn.getline(".")
+
+  if fn.match(line, "@todo") > 0 then
+    fn.setline(".", fn.substitute(line, "@todo", "@fixme", ""))
+    return
+  end
+
+  if fn.match(line, "@fixme*") > 0 then
+    fn.setline(".", fn.substitute(line, "@fixme", "@question", ""))
+    return
+  end
+
+  if fn.match(line, "@question*") > 0 then
+    fn.setline(".", fn.substitute(line, "@question", "@todo", ""))
+    return
+  end
 
 end
 
@@ -143,26 +193,44 @@ M.set_list_toggle = function()
 
 end
 
-M.win_open = function()
+--------------------------------------
+--------------------------------------
 
-  return config.winnr() ~= nil
+M.save = function()
+
+  if config.path_todo ~= nil and config.path_todo then
+    api.nvim_command(":silent! w " .. config.path_todo)
+  end
 
 end
 
--- FITUR: tambahkan show_path agar ketika berada pada filetype cekdulu
--- mempunyai fitur untuk di buka di current buffer, split atau new path..
--- dan di bukanya pake mapping
-M.show_path = function()
+M.close = function()
 
-  if config.path_todo ~= nil then
-    print(config.path_todo)
+  clear_bufnr_from_buflists(config.fname_todo)
+
+  local filetype = api.nvim_buf_get_option(0, "filetype")
+
+  if filetype == config.bufname then
+    M.save()
+    windows.close(config.bufnr_todo_winid)
+    return true
   end
+
+  return false
+
+end
+
+M.open_on_buftab = function(modetab)
+
+  M.close()
+
+  api.nvim_command(string.format("%s %s", modetab, config.path_todo))
 
 end
 
 M.open = function()
 
-  if not load_data.validate_path(config.path_todo) then
+  if not load_data.validate_path(config, "todo") then
     return
   end
 
@@ -170,34 +238,6 @@ M.open = function()
 
   mappings.set_mappings()
 
-  return true
-
-end
-
-M.save_to_file = function()
-
-  local filetype = api.nvim_buf_get_option(api.nvim_get_current_buf(), "filetype")
-
-  if filetype == config.bufname and config.path_todo ~= nil then
-    api.nvim_command(":silent! w " .. config.path_todo)
-  end
-
-end
-
-M.close_todo = function()
-
-  local filetype = api.nvim_buf_get_option(api.nvim_get_current_buf(), "filetype")
-
-  if filetype ~= config.bufname then
-    return
-  end
-
-  if not api.nvim_buf_get_var(0, "float_cekdulu_todo_win") == 1 then
-    return
-  end
-
-  M.save_to_file()
-  windows.close(config.bufnr_winid)
 end
 
 return M

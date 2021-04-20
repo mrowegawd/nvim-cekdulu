@@ -1,17 +1,32 @@
-local config = require("cekdulu.config")
 local utils = require("cekdulu.utils")
 
 local fn = vim.fn
 local g = vim.g
 
-local check_filereadble = function(filepath)
+local M = {}
+
+M = {
+
+  folders = {},
+  files = {},
+
+}
+
+M.check_filereadble = function(filepath)
+
   return fn.filereadable(filepath) ~= 0 and true or false
+
 end
 
-local create_filesystem = function()
-  fn.systemlist(string.format("mkdir -p %s", config.cekdulu_path))
-  fn.systemlist(string.format("touch %s", config.path_todo))
-  fn.systemlist(string.format("touch %s", config.path_qf))
+M.create_filesystem = function(path)
+
+  fn.systemlist(string.format("touch %s", path))
+
+end
+
+M.create_foldersystem = function(path)
+
+  fn.systemlist(string.format("mkdir -p %s", path))
 
 end
 
@@ -19,13 +34,34 @@ end
 --   return string.format("%s/.cekdulu", fn.resolve(fn.getcwd()))
 -- end
 
-local user_input = function(msg)
+local function exec_systemlist(tbl, func)
+
+  if #tbl == 0 then
+    return
+  end
+
+  for i = 1, #tbl do
+    func(tbl[i])
+  end
+
+end
+
+local create_from_user_input = function(msg)
+
   local ans = fn.input(msg)
 
   if ans == "y" or ans == "yes" then
 
     utils.clear_prompt()
-    create_filesystem()
+
+    exec_systemlist(M.folders, function(i)
+      M.create_foldersystem(i)
+    end)
+
+    exec_systemlist(M.files, function(i)
+      M.create_filesystem(i)
+    end)
+
     return true
 
   end
@@ -33,37 +69,48 @@ local user_input = function(msg)
   utils.clear_prompt_with_print()
 
   return false
+
 end
 
 local build_todo_project = function()
 
   if g.cekdulu_path == nil then
 
-    return user_input(
+    return create_from_user_input(
       "global cekdulu_path is empty,"
         .. " are you sure want to create under your current project path? y/n "
     )
 
   else
 
-    return user_input("create todo? y/n: ")
+    return create_from_user_input("create todo? y/n: ")
 
   end
 
 end
 
-local validate_path = function(path)
-  if not check_filereadble(path) then
-    return build_todo_project()
+-- Mengecek apakah validate untuk qf atau todo..
+M.validate_path = function(opts, mode)
+
+  if mode == "todo" then
+    if not M.check_filereadble(opts.path_todo) then
+
+      M.folders = opts.create_folders
+      M.files = opts.create_files
+
+      return build_todo_project()
+    end
+
+    opts.is_cekdulu_created = true
+    return true
   end
 
-  config.is_cekdulu_created = true
-  return true
+  if mode == "qf" then
+    print("creating path for qf??")
+  end
+
+  return false
+
 end
 
-return {
-
-  validate_path = validate_path,
-  check_filereadble = check_filereadble,
-
-}
+return M

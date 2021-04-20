@@ -1,14 +1,19 @@
 local api = vim.api
 
 local function set_mappings(buf)
+
   local mappings = {
-    ["<c-b>"] = "cekdulu_setlist()",
-    ["<c-space>"] = "cekdulu_setlist_toggle()",
-    ["<c-s>"] = "cekdulu_showpath()",
+    ["<c-b>"] = "set_list_todo()",
+    ["<tab>"] = "toggle_list_todo()",
+    ["<c-space>"] = "set_list_toggle()",
+    ["<c-v>"] = "open_on_buftab(\"vsplit\")",
+    ["<c-s>"] = "open_on_buftab()",
+    ["<c-t>"] = "open_on_buftab(\"tabnew\")",
   }
 
   for k, v in pairs(mappings) do
-    api.nvim_buf_set_keymap(buf, "n", k, ":lua require\"cekdulu\"." .. v .. "<cr>", {
+
+    api.nvim_buf_set_keymap(buf, "n", k, ":lua require\"cekdulu.todo\"." .. v .. "<cr>", {
       nowait = true,
       noremap = true,
       silent = true,
@@ -17,9 +22,10 @@ local function set_mappings(buf)
 
   local ignore_mappings = {
     "<c-o>",
-    "<c-i>",
+    -- "<c-i>",
     "<c-w>w",
   }
+
   for _, v in ipairs(ignore_mappings) do
     api.nvim_buf_set_keymap(buf, "n", v, "", {
       nowait = true,
@@ -37,6 +43,7 @@ local function set_mappings(buf)
       silent = true,
     })
   end
+
 end
 
 return {
