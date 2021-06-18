@@ -1,0 +1,19 @@
+
+░█▀▀░█▀▀░█░█░█▀▄░█░█░█░░░█░█
+░█░░░█▀▀░█▀▄░█░█░█░█░█░░░█░█
+░▀▀▀░▀▀▀░▀░▀░▀▀░░▀▀▀░▀▀▀░▀▀▀
+
+Date: 13 jun 2021, Filter: @todo,@question,@fixme
+
+        Project: [nvim-cektest]   14 @UNDONE 3 @QUESTION 15 @TODO
+        Project: [nvim-cekts]     3 @UNDONE 3 @QUESTION 15 @TODO
+        Project: [nvim-cektest2]  4 @UNDONE 3 @QUESTION 15 @TODO
+(tab) > Project: [nvim-cektest3]  15 @UNDONE 3 @QUESTION 15 @TODO
+             @question: kenapa color date di syntax cekdulu tidak berubah ketika di 'done' kan? @21-04-2021
+             @question: apa perlu bikin filter sort berdasarkan date nya? @22-04-2021
+             @todo: buatkan toggle agar bisa mengcreate todo|question|fixme, karena baru satu @22-04-2021
+             @question: apakah perlu menambahkan title di float win cekdulu_qf_note, seperti NOTE/TODO? @21-04-2021
+             @fixme: regex Keep (cekdulu_qf) belum optimal @22-04-2021
+            ... (only 5 of them)
+
+        Project: [nvim-cektest2]  4 @UNDONE 3 @QUESTION 15 @TODO
